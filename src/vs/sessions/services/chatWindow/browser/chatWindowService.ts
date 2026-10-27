@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { Event } from '../../../../base/common/event.js';
+import { IDisposable } from '../../../../base/common/lifecycle.js';
 import { IObservable } from '../../../../base/common/observable.js';
 import { URI } from '../../../../base/common/uri.js';
 import { localize } from '../../../../nls.js';
@@ -118,6 +119,8 @@ export interface IChatWindow {
 	readonly editorGroup: IEditorGroup | undefined;
 	/** Whether its terminals show. */
 	readonly terminalShown: IObservable<boolean>;
+	/** The active group of its terminals, while they show. */
+	readonly terminalGroup: IObservable<IEditorGroup | undefined>;
 	/** Where its terminals show, which becomes the default of its kind. */
 	readonly terminalPosition: IObservable<SessionTerminalPosition>;
 	readonly onDidClose: Event<void>;
@@ -131,6 +134,10 @@ export interface IChatWindow {
 	/** Shows its editor area, as last arranged with the chat, when only the chat shows. */
 	showEditor(): void;
 	setTerminalPosition(position: SessionTerminalPosition): void;
+	/** Shows or hides its terminals. Hiding them keeps them running, to show again. */
+	setTerminalShown(shown: boolean, options?: { readonly focus?: boolean }): Promise<void>;
+	/** Adds a terminal to its terminals while they show, else shows them. */
+	addTerminal(): Promise<void>;
 	focus(): void;
 	/** Closes it, moving editors that need confirmation to close, such as unsaved ones, to the main window. */
 	close(): boolean;
@@ -154,13 +161,34 @@ export interface IChatWindowService {
 	getWindow(windowId: number): IChatWindow | undefined;
 
 	/**
-	 * The chat window an action acts on: the one `context` identifies (see {@link IChatWindowHandle}), else the one whose
-	 * window is active, such as for a keybinding or the Command Palette.
+	 * The chat window an action acts on: the one `context` identifies, by its {@link IChatWindowHandle} or by an editor
+	 * group in it (`{ groupId }`), else the one whose window is active, such as for a keybinding or the Command Palette.
 	 */
 	resolveWindow(context: unknown): IChatWindow | undefined;
 
+	/** Registers what shows terminals in chat windows; see {@link IChatWindow.terminalShown}. */
+	registerTerminalHost(host: IChatWindowTerminalHost): IDisposable;
+
 	/** Closes `window`, and shows its chat in the main window again, with the editors of its editor area. */
 	moveToMainWindow(window: IChatWindow): Promise<void>;
+}
+
+/**
+ * Shows the terminals of the sessions of chat windows, and keeps them running while they are hidden or their windows
+ * close.
+ */
+export interface IChatWindowTerminalHost {
+	/**
+	 * Shows a terminal of the session of `window` in `group`, a group of its terminals. Resolves to whether it handed a
+	 * terminal to the group, which opens in it a moment later: false only when there is none to show.
+	 */
+	show(window: IChatWindow, group: IEditorGroup, focus: boolean): Promise<boolean>;
+	/** Opens a new terminal of the session of `window` in `group`. Resolves to whether one opened. */
+	newTerminal(window: IChatWindow, group: IEditorGroup): Promise<boolean>;
+	/** Takes the terminals of `window` out of it, as they are about to hide, keeping them running to show again. */
+	hide(window: IChatWindow): void;
+	/** Takes the terminals of `window` out of it, which closes: they are its session's again. */
+	release(window: IChatWindow): void;
 }
 
 /** Opens a chat of a session, given as `{ session, chat }`, in a chat window of its own. */
