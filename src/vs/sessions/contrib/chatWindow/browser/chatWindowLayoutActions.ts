@@ -258,3 +258,6 @@ chatWindowLayoutButtons.forEach((button, index) => {
 	MenuRegistry.appendMenuItem(Menus.ChatWindowTitleBarLayout, { command, group: 'navigation', order: index, when: ChatWindowTitleBarLayoutContext, isHiddenByDefault: true });
 	MenuRegistry.appendMenuItem(Menus.SessionActivityBar, { command, group: SessionActivityBarGroup.Panel, order: CHAT_WINDOW_LAYOUT_MENU_ORDER + 1 + index, when: ChatWindowStripLayoutContext, isHiddenByDefault: true });
 });
+
+/** Names this module, which registers chat window actions, in the list of the chat window contribution; see `chatWindowContributions`. */
+export const chatWindowLayoutActionsContribution = 'chatWindowLayoutActions';
