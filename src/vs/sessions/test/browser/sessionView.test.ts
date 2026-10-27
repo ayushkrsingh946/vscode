@@ -545,6 +545,43 @@ suite('Sessions - Session View', () => {
 		});
 	});
 
+	test('keeps its session header, and its height, unless a host shows it outside of the view', () => {
+		const layouts: number[][] = [];
+		const element = document.createElement('div');
+		const centeredContentContainer = document.createElement('div');
+		const headerElement = document.createElement('div');
+		centeredContentContainer.appendChild(headerElement);
+		const chrome: boolean[] = [];
+		const host = document.createElement('div');
+		const view: SessionView = Object.assign(Object.create(SessionView.prototype), {
+			_headerHeight: observableValue('headerHeight', 0),
+			element,
+			_isPartVisible: true,
+			_isLeafVisible: true,
+			_isVisibleObs: observableValue('visible', true),
+			_centeredContentContainer: centeredContentContainer,
+			_header: { visible: true, height: 35, element: headerElement, setWindowChrome: (shown: boolean) => chrome.push(shown) },
+			_groupsView: { layout: (...dimensions: number[]) => layouts.push(dimensions), setSessionVisible: () => { } },
+			_standaloneView: { get: () => undefined },
+			_preparationView: constObservable(undefined),
+		});
+		const parent = () => headerElement.parentElement === host ? 'host' : headerElement.parentElement === centeredContentContainer ? 'view' : 'none';
+
+		view.layout(1200, 800, 10, 20);
+		const own = parent();
+		view.setHeaderHost(host);
+		const hosted = parent();
+		view.setHeaderHost(undefined);
+
+		assert.deepStrictEqual({ own, hosted, back: parent(), chrome, layouts }, {
+			own: 'view',
+			hosted: 'host',
+			back: 'view',
+			chrome: [true, false],
+			layouts: [[1200, 765, 45, 20, 0], [1200, 800, 10, 20, 0], [1200, 765, 45, 20, 0]],
+		});
+	});
+
 	test('deduplicates effective child sizes while respecting header and visibility changes', () => {
 		const layouts: number[][] = [];
 		const header = { visible: true, height: 35 };

@@ -729,6 +729,14 @@ export class ChatWindowService extends Disposable implements IChatWindowService 
 		window.setSession(windowSession);
 		sessionView.openSession(windowSession, {});
 
+		// The session header is the top row of the window in every layout: it shows in the title bar, in place of the title,
+		// which shows again while the header does not, such as while the window shows only the chat input.
+		if (titlebar instanceof TitlebarPart) {
+			const headerTitlebar = titlebar;
+			sessionView.setHeaderHost(headerTitlebar.getSessionHeaderHost());
+			disposables.add(autorun(reader => headerTitlebar.setHostsSessionHeader(sessionView.headerShown.read(reader))));
+		}
+
 		disposables.add(autorun(reader => {
 			const title = window.content.read(reader).title?.read(reader) || kind.title;
 			if (titlebar instanceof TitlebarPart) {

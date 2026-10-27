@@ -337,6 +337,40 @@ suite('Sessions - Titlebar Part', () => {
 		});
 	}
 
+	test('shows a session header in place of the title only while it hosts one; a title bar that is never asked to is as before', () => {
+		const { instantiationService } = createTitlebar();
+		const root = append(mainWindow.document.body, $('.monaco-workbench.agent-sessions-workbench'));
+		store.add(toDisposable(() => root.remove()));
+		const createPart = () => {
+			const part = store.add(instantiationService.createInstance(TitlebarPart, Parts.TITLEBAR_PART, mainWindow));
+			part.create(append(root, $('.part.titlebar')));
+			return part;
+		};
+		const shown = (element: Element | null) => !!element && mainWindow.getComputedStyle(element).display !== 'none';
+		const read = (part: TitlebarPart) => ({
+			left: [...part.element.querySelector('.titlebar-left')!.children].map(child => child.className),
+			hostsHeader: part.element.classList.contains('hosts-session-header'),
+			headerShown: shown(part.element.querySelector('.session-header-host')),
+			titleShown: shown(part.element.querySelector('.window-title')),
+		});
+
+		const main = read(createPart());
+		const chatWindow = createPart();
+		const header = append(chatWindow.getSessionHeaderHost(), $('.session-header-bar'));
+		const notHosting = read(chatWindow);
+		chatWindow.setHostsSessionHeader(true);
+		const hosting = { ...read(chatWindow), header: shown(header) };
+		chatWindow.setHostsSessionHeader(false);
+
+		const left = main.left;
+		assert.deepStrictEqual({ main, notHosting, hosting, after: read(chatWindow) }, {
+			main: { left, hostsHeader: false, headerShown: false, titleShown: true },
+			notHosting: { left: [...left, 'session-header-host'], hostsHeader: false, headerShown: false, titleShown: true },
+			hosting: { left: [...left, 'session-header-host'], hostsHeader: true, headerShown: true, titleShown: false, header: true },
+			after: { left: [...left, 'session-header-host'], hostsHeader: false, headerShown: false, titleShown: true },
+		});
+	});
+
 	test('hides optional toolbar groups when a titlebar section overflows', () => {
 		let centerClientWidth = 100;
 		let rightClientWidth = 100;

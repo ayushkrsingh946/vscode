@@ -283,6 +283,15 @@ export class SessionHeaderBar extends Disposable {
 		}));
 	}
 
+	/**
+	 * Shows the header as the top row of its window, in place of the title of its title bar: its empty space then moves
+	 * the window rather than starting a drag of the session.
+	 */
+	setWindowChrome(shown: boolean): void {
+		this._container.classList.toggle('window-chrome', shown);
+		this._container.draggable = !shown;
+	}
+
 	setContext(context: ISessionHeaderBarContext | undefined): void {
 		const session = context?.session;
 		const activeChat = context?.chat;
