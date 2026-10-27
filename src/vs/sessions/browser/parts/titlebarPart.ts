@@ -275,6 +275,12 @@ export class TitlebarPart extends Part implements ITitlebarPart {
 			}
 		}));
 
+		// In a chat window, the actions of its toolbars act on that window and its session, not on the one that happens
+		// to be active: they get its handle. Elsewhere the toolbars are as they always were.
+		const chatWindowId = ChatWindowIdContext.getValue(this.contextKeyService);
+		const chatWindowHandle = typeof chatWindowId === 'number' && chatWindowId >= 0 ? { chatWindowId } : undefined;
+		const chatWindowMenuOptions = chatWindowHandle ? { menuOptions: { shouldForwardArgs: true } } : undefined;
+
 		// Actions toolbar (Open in VS Code), rendered right of the command center.
 		const centerActionsContainer = append(this.centerContent, $('div.titlebar-actions-container.titlebar-center-actions-container'));
 		const centerActionsToolBar = this._register(this.instantiationService.createInstance(MenuWorkbenchToolBar, centerActionsContainer, Menus.TitleBarCenterRight, {
@@ -283,6 +289,7 @@ export class TitlebarPart extends Part implements ITitlebarPart {
 			hiddenItemStrategy: HiddenItemStrategy.NoHide,
 			telemetrySource: 'titlePart.centerRight',
 			toolbarOptions: { primaryGroup: () => true },
+			...chatWindowMenuOptions,
 		}));
 
 		// Right toolbar (driven by Menus.TitleBarRightLayout - includes layout actions)
@@ -293,12 +300,8 @@ export class TitlebarPart extends Part implements ITitlebarPart {
 			hiddenItemStrategy: HiddenItemStrategy.NoHide,
 			telemetrySource: 'titlePart.right',
 			toolbarOptions: { primaryGroup: () => true },
+			...chatWindowMenuOptions,
 		}));
-		// In a chat window, its layout actions act on that window, not on the one that happens to be active.
-		const chatWindowId = ChatWindowIdContext.getValue(this.contextKeyService);
-		if (typeof chatWindowId === 'number' && chatWindowId >= 0) {
-			rightToolBar.context = { chatWindowId };
-		}
 
 		// Session title actions toolbar (before right toolbar)
 		const sessionActionsContainer = prepend(this.rightContent, $('div.titlebar-actions-container.titlebar-session-actions-container'));
@@ -308,7 +311,14 @@ export class TitlebarPart extends Part implements ITitlebarPart {
 			hiddenItemStrategy: HiddenItemStrategy.NoHide,
 			telemetrySource: 'titlePart.sessionActions',
 			toolbarOptions: { primaryGroup: () => true },
+			...chatWindowMenuOptions,
 		}));
+
+		if (chatWindowHandle) {
+			for (const toolBar of [rightToolBar, centerActionsToolBar, sessionActionsToolBar]) {
+				toolBar.context = chatWindowHandle;
+			}
+		}
 
 		const screenReaderToolBarElement = prepend(this.rightContent, $('div.titlebar-actions-container.titlebar-screen-reader-container'));
 		const screenReaderButtonBar = this._register(this.instantiationService.createInstance(MenuWorkbenchButtonBar, screenReaderToolBarElement, Menus.TitleBarAccessibility, {

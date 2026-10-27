@@ -11,6 +11,7 @@ import { IObservable, observableValue } from '../../../../base/common/observable
 import { localize } from '../../../../nls.js';
 import { IConfigurationService } from '../../../../platform/configuration/common/configuration.js';
 import { IContextKeyService } from '../../../../platform/contextkey/common/contextkey.js';
+import { ServiceCollection } from '../../../../platform/instantiation/common/serviceCollection.js';
 import { EditorCloseContext, GroupModelChangeKind } from '../../../../workbench/common/editor.js';
 import { EditorInput } from '../../../../workbench/common/editor/editorInput.js';
 import { IEditorGroup, IEditorGroupsService, IEmbeddedEditorPart } from '../../../../workbench/services/editor/common/editorGroupsService.js';
@@ -33,6 +34,8 @@ export interface IChatWindowTerminalsOwner {
 	bindContext(contextKeyService: IContextKeyService): void;
 	/** Whether the window closes, so that terminals closing with it do not hide the terminals. */
 	isClosing(): boolean;
+	/** The services of the window's parts in place of the main window's, such as the session they act on. */
+	readonly services?: ServiceCollection;
 	/** An element of the window, which the part of the terminals is created in, so that it belongs to the window. */
 	readonly container: HTMLElement;
 }
@@ -79,7 +82,7 @@ export class ChatWindowTerminals extends Disposable {
 			return this._part;
 		}
 		const element = append(this._owner.container, $('.part.editor.chat-window-terminals'));
-		const part = this._editorGroupsService.createEditorPart({ container: element, label: localize('chatWindow.terminals', "Terminals") });
+		const part = this._editorGroupsService.createEditorPart({ container: element, label: localize('chatWindow.terminals', "Terminals"), services: this._owner.services });
 		this._part = part;
 		this._owner.parts.push(part);
 		this._partDisposables.add(toDisposable(() => {

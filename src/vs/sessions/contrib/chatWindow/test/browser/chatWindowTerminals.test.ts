@@ -26,7 +26,7 @@ import { EditorCloseContext, IEditorCloseEvent } from '../../../../../workbench/
 import { EditorInput } from '../../../../../workbench/common/editor/editorInput.js';
 import { IGroupModelChangeEvent } from '../../../../../workbench/common/editor/editorGroupModel.js';
 import { DEFAULT_COMMANDS_TO_SKIP_SHELL } from '../../../../../workbench/contrib/terminal/common/terminal.js';
-import { IEditorGroup, IEditorGroupsService, IEmbeddedEditorPart } from '../../../../../workbench/services/editor/common/editorGroupsService.js';
+import { ICreateEditorPartOptions, IEditorGroup, IEditorGroupsService, IEmbeddedEditorPart } from '../../../../../workbench/services/editor/common/editorGroupsService.js';
 import { SessionGridCell, SessionLayoutMode, SessionTerminalPosition } from '../../../../common/sessionGridLayout/sessionGridLayout.js';
 import { CHAT_WINDOW_TOGGLE_TERMINAL_COMMAND_ID, ChatWindowHasEditorAreaContext, IChatWindow, IChatWindowKind, IChatWindowService, IChatWindowTerminalHost, SessionLayoutModeContext } from '../../../../services/chatWindow/browser/chatWindowService.js';
 import { ChatWindowCellView } from '../../browser/chatWindowGridHost.js';
@@ -67,7 +67,7 @@ suite('Chat window terminals', () => {
 
 	const kind: IChatWindowKind = { id: 'test', title: 'Test', defaultLayout: SessionLayoutMode.SideBySide };
 
-	function createEnvironment(options: { handed?: boolean } = {}) {
+	function createEnvironment(options: { handed?: boolean; services?: ServiceCollection } = {}) {
 		const state = new ChatWindowState(kind, true, new ChatWindowDefaults(kind, disposables.add(new InMemoryStorageService())));
 		const group = new TestGroup(10);
 		disposables.add({ dispose: () => group.dispose() });
@@ -75,6 +75,8 @@ suite('Chat window terminals', () => {
 		const onDidRemoveGroup = disposables.add(new Emitter<IEditorGroup>());
 		const onDidActivateGroup = disposables.add(new Emitter<{ group: IEditorGroup }>());
 		const created: IEmbeddedEditorPart[] = [];
+		const createdWith: { readonly services: ServiceCollection | undefined; readonly inWindow: boolean }[] = [];
+		const windowContainer = $('div');
 		const part = new class extends mock<IEmbeddedEditorPart>() {
 			override readonly groups = [group];
 			override readonly activeGroup = group;
@@ -90,7 +92,8 @@ suite('Chat window terminals', () => {
 		instantiationService.stub(IConfigurationService, new TestConfigurationService());
 		instantiationService.stub(IEditorGroupsService, new class extends mock<IEditorGroupsService>() {
 			override get parts() { return created; }
-			override createEditorPart() {
+			override createEditorPart(createOptions: ICreateEditorPartOptions) {
+				createdWith.push({ services: createOptions.services, inWindow: (createOptions.container as HTMLElement).parentElement === windowContainer });
 				created.push(part);
 				return part;
 			}
@@ -119,9 +122,10 @@ suite('Chat window terminals', () => {
 			parts: [],
 			bindContext: () => { },
 			isClosing: () => closing,
-			container: $('div'),
+			services: options.services,
+			container: windowContainer,
 		}, () => hostAvailable ? host : undefined));
-		return { state, group, terminals, calls, created, setHost: (available: boolean) => hostAvailable = available, setClosing: (value: boolean) => closing = value };
+		return { state, group, terminals, calls, created, createdWith, setHost: (available: boolean) => hostAvailable = available, setClosing: (value: boolean) => closing = value };
 	}
 
 	test('terminals shown before a host registered are filled once it does', async () => {
@@ -191,6 +195,14 @@ suite('Chat window terminals', () => {
 			lastClosedAfterVeto: false,
 			calls: ['show:10', 'release', 'show:10', 'hide', 'release'],
 		});
+	});
+
+	test('the part of the terminals is created in its window, which it belongs to, with the services of its window, such as the session it acts on', async () => {
+		const services = new ServiceCollection();
+		const { terminals, createdWith, setHost } = createEnvironment({ services });
+		setHost(true);
+		await terminals.setShown(true, false);
+		assert.deepStrictEqual(createdWith.map(candidate => ({ services: candidate.services === services, inWindow: candidate.inWindow })), [{ services: true, inWindow: true }]);
 	});
 
 	test('a terminal opened in the editor area moves to the terminals, which show', async () => {
