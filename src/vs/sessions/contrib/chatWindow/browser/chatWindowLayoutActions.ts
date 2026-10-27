@@ -9,13 +9,14 @@ import { ThemeIcon } from '../../../../base/common/themables.js';
 import { localize, localize2 } from '../../../../nls.js';
 import { ILocalizedString } from '../../../../platform/action/common/action.js';
 import { Action2, MenuRegistry, registerAction2 } from '../../../../platform/actions/common/actions.js';
-import { ContextKeyExpr } from '../../../../platform/contextkey/common/contextkey.js';
+import { ContextKeyExpr, ContextKeyExpression } from '../../../../platform/contextkey/common/contextkey.js';
 import { ServicesAccessor } from '../../../../platform/instantiation/common/instantiation.js';
 import { ChatContextKeys } from '../../../../workbench/contrib/chat/common/actions/chatContextKeys.js';
-import { Menus } from '../../../browser/menus.js';
+import { Menus, SessionActivityBarGroup } from '../../../browser/menus.js';
+import { SessionActivityBarLayoutActionsContext } from '../../../common/contextkeys.js';
 import { SessionsCategories } from '../../../common/categories.js';
 import { SessionLayoutMode } from '../../../common/sessionGridLayout/sessionGridLayout.js';
-import { CHAT_WINDOW_TOGGLE_EDITOR_COMMAND_ID, ChatWindowContext, ChatWindowHasEditorAreaContext, IChatWindow, IChatWindowService, SessionLayoutModeContext, SessionSplitLayoutContext } from '../../../services/chatWindow/browser/chatWindowService.js';
+import { CHAT_WINDOW_TOGGLE_EDITOR_COMMAND_ID, ChatWindowContext, ChatWindowHasEditorAreaContext, ChatWindowHasSessionActivityBarContext, IChatWindow, IChatWindowService, SessionLayoutModeContext, SessionSplitLayoutContext } from '../../../services/chatWindow/browser/chatWindowService.js';
 
 /** A layout mode as offered to the user. */
 export interface IChatWindowLayoutModeChoice {
@@ -218,14 +219,42 @@ registerAction2(class ToggleChatWindowConversationAction extends Action2 {
 	}
 });
 
-// The Layout menu in the title bar of a chat window, which reads the layout it shows.
+// One entry point to the Layout menu of a chat window: in its title bar, or in its Session Activity Bar while the strip shows
+// the layout actions, as the main window's does. The Layout menu ends the layout actions, after the buttons the user shows.
+const ChatWindowStripLayoutContext = ContextKeyExpr.and(ChatWindowLayoutContext, ChatWindowHasSessionActivityBarContext, SessionActivityBarLayoutActionsContext)!;
+const ChatWindowTitleBarLayoutContext = ContextKeyExpr.and(ChatWindowLayoutContext, ContextKeyExpr.or(ChatWindowHasSessionActivityBarContext.negate(), SessionActivityBarLayoutActionsContext.negate()))!;
+const CHAT_WINDOW_LAYOUT_MENU_ORDER = 100;
 for (const choice of chatWindowLayoutModeChoices) {
-	MenuRegistry.appendMenuItem(Menus.TitleBarRightLayout, {
+	const title = localize('chatWindowLayoutMenu', "Layout: {0}", choice.shortTitle);
+	const shown = SessionLayoutModeContext.isEqualTo(choice.mode);
+	MenuRegistry.appendMenuItem(Menus.ChatWindowTitleBarLayout, {
 		submenu: Menus.ChatWindowLayout,
-		title: localize('chatWindowLayoutMenu', "Layout: {0}", choice.shortTitle),
+		title,
 		icon: Codicon.layout,
 		group: 'navigation',
-		order: -1,
-		when: ContextKeyExpr.and(ChatWindowLayoutContext, SessionLayoutModeContext.isEqualTo(choice.mode)),
+		order: CHAT_WINDOW_LAYOUT_MENU_ORDER,
+		when: ContextKeyExpr.and(ChatWindowTitleBarLayoutContext, shown),
+	});
+	MenuRegistry.appendMenuItem(Menus.SessionActivityBar, {
+		submenu: Menus.ChatWindowLayout,
+		title,
+		icon: Codicon.layout,
+		group: SessionActivityBarGroup.Panel,
+		order: CHAT_WINDOW_LAYOUT_MENU_ORDER,
+		when: ContextKeyExpr.and(ChatWindowStripLayoutContext, shown),
 	});
 }
+
+/** The button of each action of the Layout menu, which the user can show beside the Layout menu, as an icon of its own. */
+const chatWindowLayoutButtons: readonly { readonly id: string; readonly title: ILocalizedString; readonly icon: ThemeIcon; readonly toggled?: ContextKeyExpression }[] = [
+	...chatWindowLayoutModeChoices.map(choice => ({ id: choice.id, title: choice.title, icon: choice.icon, toggled: SessionLayoutModeContext.isEqualTo(choice.mode) })),
+	{ id: TOGGLE_CHAT_WINDOW_CHAT_COMMAND_ID, title: localize2('chatWindowToggleChatButton', "Toggle Chat"), icon: Codicon.commentDiscussion, toggled: SessionLayoutModeContext.notEqualsTo(SessionLayoutMode.EditorOnly) },
+	{ id: CHAT_WINDOW_TOGGLE_EDITOR_COMMAND_ID, title: localize2('chatWindowToggleEditorButton', "Toggle Editor"), icon: Codicon.layoutSidebarRight, toggled: SessionLayoutModeContext.notEqualsTo(SessionLayoutMode.ChatOnly) },
+	{ id: TOGGLE_CHAT_WINDOW_ARRANGEMENT_COMMAND_ID, title: localize2('chatWindowToggleArrangementButton', "Toggle Stacked"), icon: Codicon.layoutPanel, toggled: SessionSplitLayoutContext.isEqualTo(SessionLayoutMode.Stacked) },
+	{ id: TOGGLE_CHAT_WINDOW_CONVERSATION_COMMAND_ID, title: localize2('chatWindowToggleConversation', "Toggle Chat Conversation"), icon: Codicon.listFlat },
+];
+chatWindowLayoutButtons.forEach((button, index) => {
+	const command = { id: button.id, title: button.title, icon: button.icon, toggled: button.toggled };
+	MenuRegistry.appendMenuItem(Menus.ChatWindowTitleBarLayout, { command, group: 'navigation', order: index, when: ChatWindowTitleBarLayoutContext, isHiddenByDefault: true });
+	MenuRegistry.appendMenuItem(Menus.SessionActivityBar, { command, group: SessionActivityBarGroup.Panel, order: CHAT_WINDOW_LAYOUT_MENU_ORDER + 1 + index, when: ChatWindowStripLayoutContext, isHiddenByDefault: true });
+});

@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { ISessionScope } from '../../../services/sessions/browser/sessionScope.js';
 import { $, append, getActiveWindow } from '../../../../base/browser/dom.js';
 import { timeout } from '../../../../base/common/async.js';
 import { Emitter, Event } from '../../../../base/common/event.js';
@@ -50,6 +51,7 @@ import { ISessionEditorWorkingSetService } from '../../layout/common/sessionEdit
 import { ChatModelHold, closeChatWindowsOfGoneChats, followReplacedWindowSessions, IChatWindowOpening, InFlightOperations, openCleaningUpOnFailure } from './chatWindowOpening.js';
 import { deserializeChatWindowEditors, serializeChatWindowEditors } from './chatWindowEditors.js';
 import { ChatWindowCellView, ChatWindowCellSizing, ChatWindowGridHost, IChatWindowCellConstraints } from './chatWindowGridHost.js';
+import { addEmptyEditorAreaAddTab } from './chatWindowEditorArea.js';
 import { ChatWindowInputOnlyController } from './chatWindowInputOnly.js';
 import { ChatWindowTerminals, releaseChatWindowTerminalsOnUnload } from './chatWindowTerminals.js';
 import { ChatWindowChatLayouts, ChatWindowChatSizes, ChatWindowDefaults, ChatWindowState } from './chatWindowState.js';
@@ -82,6 +84,26 @@ export function getChatWindowDefaultSizing(cell: SessionGridCell, axis: 'row' | 
  */
 export function chatWindowPartOptions(showTabs?: string): DeepPartial<IEditorPartOptions> {
 	return { doubleClickTabToToggleEditorGroupSizes: 'off', ...(showTabs === 'none' ? { showTabs: 'single' } : undefined) };
+}
+
+/** The services of the editor parts of a chat window in place of the main window's: their session is the window's. */
+export function createChatWindowServices(sessionScope: ISessionScope): ServiceCollection {
+	return new ServiceCollection([ISessionScope, sessionScope]);
+}
+
+/**
+ * Creates the editor area of a chat window, the part its editors open in; what it shows acts on the window's session.
+ * Its element is in the window's `windowContainer` as the part is created, which takes the window it belongs to from it.
+ */
+export function createChatWindowEditorArea(editorGroupsService: IEditorGroupsService, windowContainer: HTMLElement, services: ServiceCollection): IEmbeddedEditorPart {
+	return editorGroupsService.createEditorPart({
+		container: append(windowContainer, $('.part.editor.chat-window-editor-area')),
+		label: localize('chatWindow.editorArea', "Editor Area"),
+		groupViewOptions: getEditorAreaGroupViewOptions(),
+		// When focus is in the chat, which is in no editor part, editors open here.
+		primary: true,
+		services,
+	});
 }
 
 /** The options of the groups of the editor area of a chat window: as the main window's editor area of the Agents window. */
@@ -493,6 +515,8 @@ export class ChatWindowService extends Disposable implements IChatWindowService 
 		const gridSession = this._sessionsService.visibleSessions.get().find(candidate => candidate?.sessionId === session.sessionId && !candidate.scopedChatResource);
 		const chatResource = content.chat ?? gridSession?.activeChat.get().resource ?? session.mainChat.get().resource;
 		const sessionObs = observableValue<IActiveSession | undefined>(this, undefined);
+		// What the window shows acts on its session, not on the one the main window shows.
+		const sessionScope: ISessionScope = { _serviceBrand: undefined, session: sessionObs };
 		const state = new ChatWindowState(kind, hasEditorArea, new ChatWindowDefaults(kind, this._storageService), {
 			initial: this._chatLayouts.get(chatResource),
 			// For the chat the window shows when the user chooses, which a replaced session changes.
@@ -518,14 +542,7 @@ export class ChatWindowService extends Disposable implements IChatWindowService 
 		const parts: IEmbeddedEditorPart[] = [];
 		let editorArea: IEmbeddedEditorPart | undefined;
 		if (hasEditorArea) {
-			const editorAreaElement = append(container, $('.part.editor.chat-window-editor-area'));
-			editorArea = this._editorGroupsService.createEditorPart({
-				container: editorAreaElement,
-				label: localize('chatWindow.editorArea', "Editor Area"),
-				groupViewOptions: getEditorAreaGroupViewOptions(),
-				// When focus is in the chat, which is in no editor part, editors open here.
-				primary: true,
-			});
+			editorArea = createChatWindowEditorArea(this._editorGroupsService, container, createChatWindowServices(sessionScope));
 			const part = editorArea;
 			parts.push(part);
 			disposables.add(toDisposable(() => {
@@ -556,6 +573,7 @@ export class ChatWindowService extends Disposable implements IChatWindowService 
 		const windowInstantiationService = disposables.add(this._instantiationService.createChild(new ServiceCollection(
 			[IContextKeyService, windowContextKeyService],
 			[IEditorService, editorAreaEditorService],
+			[ISessionScope, sessionScope],
 		)));
 
 		// The window's context, bound on the window and on its editor parts, which are scoped to the global context.
@@ -628,10 +646,13 @@ export class ChatWindowService extends Disposable implements IChatWindowService 
 		disposables.add(this._storageService.onWillSaveState(saveSizes));
 		disposables.add(auxiliaryWindow.onBeforeUnload(saveSizes));
 
+		// The terminals show only with a terminal in them, never as an empty cell, such as before a terminal the host hands
+		// them opened, or before the host registered.
+		const terminalsRef = observableValue<ChatWindowTerminals | undefined>(this, undefined);
 		const gridLayout = derived(this, reader => computeSessionGridLayout({
 			mode: state.layout.read(reader),
 			terminalPosition: state.terminalPosition.read(reader),
-			terminalsVisible: state.terminalShown.read(reader),
+			terminalsVisible: state.terminalShown.read(reader) && !!terminalsRef.read(reader)?.hasTerminals.read(reader),
 			activityBar: activityBarEnabled.read(reader),
 			inputOnly: state.inputOnly.read(reader),
 		}));
@@ -688,9 +709,11 @@ export class ChatWindowService extends Disposable implements IChatWindowService 
 			parts,
 			bindContext: contextKeyService => disposables.add(bindChatWindowContext(contextKeyService, contextValues)),
 			isClosing: () => window.closing || unloading || disposables.isDisposed,
+			services: createChatWindowServices(sessionScope),
 			container,
 		}, () => this._terminalHost));
 		window.attachTerminals(terminals);
+		terminalsRef.set(terminals, undefined);
 		if (editorArea) {
 			disposables.add(terminals.trackEditorArea(editorArea));
 		}
@@ -702,6 +725,8 @@ export class ChatWindowService extends Disposable implements IChatWindowService 
 				onDidCloseLastEditor: () => window.setLayout(SessionLayoutMode.ChatOnly),
 				isClosing: () => window.closing || unloading || disposables.isDisposed,
 			}));
+			// Its empty groups offer the same Add Tab entries as the main window's.
+			disposables.add(addEmptyEditorAreaAddTab(part, this._instantiationService));
 			this._moveEditors(content.editorArea?.moveEditorsFrom ?? [], part.activeGroup);
 			this._openEditors(content.editorArea ?? {}, part.activeGroup);
 		}

@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import assert from 'assert';
+import { $, append } from '../../../../../base/browser/dom.js';
 import { mainWindow } from '../../../../../base/browser/window.js';
 import { ActionRunner, IAction } from '../../../../../base/common/actions.js';
 import { DisposableStore } from '../../../../../base/common/lifecycle.js';
@@ -22,11 +23,14 @@ import { InMemoryStorageService } from '../../../../../platform/storage/common/s
 import { EditorExtensions, IEditorFactoryRegistry } from '../../../../../workbench/common/editor.js';
 import { ChatContextKeys } from '../../../../../workbench/contrib/chat/common/actions/chatContextKeys.js';
 import { IAuxiliaryWindowService } from '../../../../../workbench/services/auxiliaryWindow/browser/auxiliaryWindowService.js';
-import { IEditorGroupsService } from '../../../../../workbench/services/editor/common/editorGroupsService.js';
+import { IEditorGroupsService, IEmbeddedEditorPart } from '../../../../../workbench/services/editor/common/editorGroupsService.js';
+import { IConfigurationService } from '../../../../../platform/configuration/common/configuration.js';
+import { ISessionScope } from '../../../../services/sessions/browser/sessionScope.js';
 import { createEditorParts, workbenchInstantiationService } from '../../../../../workbench/test/browser/workbenchTestServices.js';
 import { computeSessionGridLayout, SessionLayoutMode, SessionTerminalPosition } from '../../../../common/sessionGridLayout/sessionGridLayout.js';
 import { ChatWindowTerminalRowContext, IChatWindow, IChatWindowKind, IChatWindowService } from '../../../../services/chatWindow/browser/chatWindowService.js';
-import { bindChatWindowContext, resolveChatWindowFromContext } from '../../browser/chatWindowService.js';
+import { bindChatWindowContext, createChatWindowEditorArea, createChatWindowServices, resolveChatWindowFromContext } from '../../browser/chatWindowService.js';
+import { createChatWindowTerminalsPart } from '../../browser/chatWindowTerminals.js';
 import { ChatWindowDefaults, ChatWindowState } from '../../browser/chatWindowState.js';
 import '../../browser/chatWindowTerminalActions.js';
 
@@ -39,6 +43,28 @@ suite('Chat window Terminal Position', () => {
 	});
 
 	ensureNoDisposablesAreLeakedInTestSuite();
+
+	for (const showTabs of ['multiple', 'single'] as const) {
+		test(`the terminals of a chat window have no Add Tab, only the terminals' own New Terminal adds to them; the editor area keeps its Add Tab (tabs: ${showTabs})`, async () => {
+			const configurationService = new TestConfigurationService({ 'workbench.editor.showTabs': showTabs });
+			const instantiationService = workbenchInstantiationService({ contextKeyService: () => disposables.add(new ContextKeyService(configurationService)) }, disposables);
+			instantiationService.stub(IConfigurationService, configurationService);
+			instantiationService.invokeFunction(accessor => Registry.as<IEditorFactoryRegistry>(EditorExtensions.EditorFactory).start(accessor));
+			instantiationService.stub(IAuxiliaryWindowService, new class extends mock<IAuxiliaryWindowService>() { override getWindow() { return undefined; } }());
+			const parts = await createEditorParts(instantiationService, disposables);
+			const container = mainWindow.document.createElement('div');
+			mainWindow.document.body.appendChild(container);
+			disposables.add({ dispose: () => container.remove() });
+			const scope: ISessionScope = { _serviceBrand: undefined, session: constObservable(undefined) };
+			const terminals = createChatWindowTerminalsPart(parts, append(container, $('.part.editor.chat-window-terminals')), createChatWindowServices(scope));
+			disposables.add({ dispose: () => terminals.close() });
+			const editorArea = createChatWindowEditorArea(parts, container, createChatWindowServices(scope));
+			disposables.add({ dispose: () => editorArea.close() });
+			const addTabs = (part: IEmbeddedEditorPart) => (part.element as HTMLElement).querySelectorAll('.tabs-bar-add-tab').length;
+
+			assert.deepStrictEqual({ terminals: addTabs(terminals), editorArea: addTabs(editorArea) }, { terminals: 0, editorArea: 1 });
+		});
+	}
 
 	for (const [where, menuId, editorContext] of [['the More Actions of', MenuId.EditorTitle, false], ['the context menu of a tab of', MenuId.EditorTitleContext, true]] as const) {
 		test(`from ${where} a chat window's terminals, it changes the layout of that window, not of the active one, and shows the position chosen`, async () => {

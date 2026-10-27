@@ -42,6 +42,7 @@ import { ARRANGE_SESSIONS_COMMAND_ID, CLOSE_CHAT_COMMAND_ID, CLOSE_SESSION_COMMA
 import { IActiveSession, ISessionsManagementService } from '../../../services/sessions/common/sessionsManagement.js';
 import { ISessionsService } from '../../../services/sessions/browser/sessionsService.js';
 import { ChatOriginKind, getChatCapabilities, getGitHubPullRequestRefs, getHighestPriorityPullRequestIcon, getUntitledSessionTitle, IChat, isSideChatOf, ISession, SessionStatus } from '../../../services/sessions/common/session.js';
+import { NotInChatWindowContext } from '../../../services/chatWindow/browser/chatWindowService.js';
 import { ISessionsPartService } from '../../../services/sessions/browser/sessionsPartService.js';
 import { ISessionGroupsService } from '../../../services/sessions/browser/sessionGroupsService.js';
 import { ISessionsListModelService } from '../../../services/sessions/browser/sessionsListModelService.js';
@@ -2270,7 +2271,8 @@ registerAction2(class CloseEditorAreaAction extends Action2 {
 				id: MenuId.EditorGroupWatermarkToolbar,
 				group: 'navigation',
 				order: 10,
-				when: IsSessionsWindowContext,
+				// A chat window closes its own editor area.
+				when: ContextKeyExpr.and(IsSessionsWindowContext, NotInChatWindowContext),
 			},
 		});
 	}

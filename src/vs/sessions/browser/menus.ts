@@ -33,6 +33,11 @@ export const Menus = {
 	TitleBarRightLayout: new MenuId('SessionsTitleBarRightLayout'),
 	/** The Layout menu of a chat window: how it shows its chat and its editor area. */
 	ChatWindowLayout: new MenuId('SessionsChatWindowLayout'),
+	/**
+	 * The layout actions in the title bar of a chat window: its Layout menu, and a button for each of its actions, hidden
+	 * until the user shows it from the context menu of the buttons.
+	 */
+	ChatWindowTitleBarLayout: new MenuId('SessionsChatWindowTitleBarLayout'),
 	MobileTitleBarCenter: new MenuId('SessionsMobileTitleBarCenter'),
 	PanelTitle: new MenuId('SessionsPanelTitle'),
 	SidebarTitle: new MenuId('SessionsSidebarTitle'),
