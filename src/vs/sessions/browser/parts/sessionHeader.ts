@@ -60,6 +60,11 @@ export class SessionHeader extends Disposable {
 		}));
 	}
 
+	/** See {@link SessionHeaderBar.setWindowChrome}. */
+	setWindowChrome(shown: boolean): void {
+		this._bar.setWindowChrome(shown);
+	}
+
 	setVisible(visible: boolean): void {
 		this._bar.setVisible(visible);
 	}

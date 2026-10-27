@@ -267,3 +267,26 @@
 .agent-sessions-workbench.monaco-workbench .part.titlebar .window-title.has-fixed-title > .command-center {
 	display: none;
 }
+
+/* A chat window's title bar shows its session header in place of its title, as the top row of the window. */
+.monaco-workbench .part.titlebar .session-header-host {
+	display: none;
+}
+
+.monaco-workbench .part.titlebar.hosts-session-header .session-header-host {
+	display: flex;
+	flex: 1 1 auto;
+	min-width: 0;
+	height: 100%;
+	align-items: center;
+	box-sizing: border-box;
+}
+
+/* The same optical offset as the toolbars of the title bar, so that the header lines up with them. */
+.agent-sessions-workbench.monaco-workbench:not(.modern-ui-compact) .part.titlebar.hosts-session-header .session-header-host {
+	padding-top: var(--vscode-spacing-size20);
+}
+
+.monaco-workbench .part.titlebar.hosts-session-header > .sessions-titlebar-container > .titlebar-center > .window-title {
+	display: none;
+}

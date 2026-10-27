@@ -62,3 +62,16 @@
 	border: none;
 	border-radius: 0;
 }
+
+/* While the header is above the chat's column only, the editor area runs to the top of the window: the empty space of its titles, and of the toolbar of an empty group, moves the window. */
+.monaco-workbench .chat-window-host.chat-window-header-chat-column .chat-window-editor-area .editor-group-container > .title,
+.monaco-workbench .chat-window-host.chat-window-header-chat-column .chat-window-editor-area .editor-group-container.empty > .editor-group-container-toolbar {
+	-webkit-app-region: drag;
+}
+
+.monaco-workbench .chat-window-host.chat-window-header-chat-column .chat-window-editor-area .editor-group-container .tab,
+.monaco-workbench .chat-window-host.chat-window-header-chat-column .chat-window-editor-area .editor-group-container .monaco-icon-label,
+.monaco-workbench .chat-window-host.chat-window-header-chat-column .chat-window-editor-area .editor-group-container .breadcrumbs-control,
+.monaco-workbench .chat-window-host.chat-window-header-chat-column .chat-window-editor-area .editor-group-container .action-item {
+	-webkit-app-region: no-drag;
+}

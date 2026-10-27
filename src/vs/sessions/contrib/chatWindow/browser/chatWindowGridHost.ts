@@ -9,7 +9,7 @@ import { LayoutPriority } from '../../../../base/browser/ui/splitview/splitview.
 import { Emitter, Event } from '../../../../base/common/event.js';
 import { Disposable, DisposableStore } from '../../../../base/common/lifecycle.js';
 import { IGridEdgeInsets, NO_GRID_EDGE_INSETS, updateGridGapSashes } from '../../../browser/parts/gridGap.js';
-import { diffSessionGridLayout, ISessionGridLayout, ISessionGridLayoutBranch, SessionGridCell, SessionGridLayoutNode } from '../../../common/sessionGridLayout/sessionGridLayout.js';
+import { diffSessionGridLayout, ISessionGridLayout, ISessionGridLayoutBranch, SessionGridCell, SessionGridLayoutNode, SessionHeaderSpan } from '../../../common/sessionGridLayout/sessionGridLayout.js';
 
 /** What a cell of a chat window shows: the chat, the editor area, the terminals or the Session Activity Bar. */
 export interface IChatWindowCellContent {
@@ -230,6 +230,59 @@ export class ChatWindowGridHost extends Disposable {
 		return this._grid;
 	}
 
+	private _header = { height: 0, chatColumn: false };
+
+	/**
+	 * The window's header row, above the grid: `height` tall, across the window unless `chatColumn` allows it above the
+	 * chat's column only (see {@link ISessionGridLayout.header}). Then the grid runs to the top of the window, and the
+	 * chat's card starts below the header.
+	 */
+	setHeader(height: number, chatColumn: boolean): void {
+		if (this._header.height === height && this._header.chatColumn === chatColumn) {
+			return;
+		}
+		this._header = { height, chatColumn };
+		this._layoutGridBox();
+		this._applyInsets();
+	}
+
+	/** Where the header shows with the layout the grid shows. */
+	get headerSpan(): SessionHeaderSpan {
+		return this._headerSpanOf(this._layout);
+	}
+
+	private _headerSpanOf(layout: ISessionGridLayout | undefined): SessionHeaderSpan {
+		return this._header.chatColumn && layout?.header === SessionHeaderSpan.ChatColumn ? SessionHeaderSpan.ChatColumn : SessionHeaderSpan.Full;
+	}
+
+	/** The box of the grid in the window: below a header across the window, else the whole window. */
+	private _gridBox(): IBox & { top: number } {
+		const dimension = this._dimension!;
+		const top = this._headerSpanOf(this._layout) === SessionHeaderSpan.Full ? Math.min(this._header.height, dimension.height) : 0;
+		return { top, width: dimension.width, height: dimension.height - top };
+	}
+
+	private _placeGrid(grid: SerializableGrid<ChatWindowCellView>, box: IBox & { top: number }): void {
+		grid.element.style.marginTop = `${box.top}px`;
+		grid.element.style.height = `${box.height}px`;
+	}
+
+	private _layoutGridBox(): void {
+		if (!this._grid || !this._dimension) {
+			return;
+		}
+		const box = this._gridBox();
+		this._placeGrid(this._grid, box);
+		this._grid.layout(box.width, box.height);
+		this._onDidLayoutCells.fire();
+	}
+
+	/** The width the grid lays `cell` out with, or 0 while it does not show. */
+	getCellWidth(cell: SessionGridCell): number {
+		const view = this._cells.get(cell);
+		return view && this._grid && this._layout && this._leaves(this._layout.topology).some(leaf => leaf.cell === cell && leaf.visible) ? this._grid.getViewSize(view).width : 0;
+	}
+
 	/** The gap between the cards of the cells; 0 keeps them flush. */
 	setGap(gap: number): void {
 		if (this._gap === gap) {
@@ -262,6 +315,7 @@ export class ChatWindowGridHost extends Disposable {
 			this._rebuild(layout);
 			return;
 		}
+		const headerChanged = this._headerSpanOf(previous) !== this._headerSpanOf(layout);
 		this._layout = layout;
 		if (change === 'visibility') {
 			for (const leaf of this._leaves(layout.topology)) {
@@ -269,6 +323,9 @@ export class ChatWindowGridHost extends Disposable {
 				if (view && this._grid.isViewVisible(view) !== leaf.visible) {
 					this._grid.setViewVisible(view, leaf.visible);
 				}
+			}
+			if (headerChanged) {
+				this._layoutGridBox();
 			}
 			this._applyInsets();
 		}
@@ -279,8 +336,7 @@ export class ChatWindowGridHost extends Disposable {
 		if (!this._grid && this._layout) {
 			this._rebuild(this._layout);
 		}
-		this._grid?.layout(width, height);
-		this._onDidLayoutCells.fire();
+		this._layoutGridBox();
 	}
 
 	/** The sizes the cells showed with, per topology, including the cells that show now; see {@link importSizes}. */
@@ -378,7 +434,7 @@ export class ChatWindowGridHost extends Disposable {
 		const previousElement = this._grid?.element;
 		this._grid = undefined;
 
-		const dimension = this._dimension!;
+		const dimension = this._gridBox();
 		const json = this._serialize(layout.topology, dimension);
 		const grid = this._gridDisposables.add(SerializableGrid.deserialize<ChatWindowCellView>(json, {
 			fromJSON: (data: { type: SessionGridCell }) => {
@@ -395,9 +451,8 @@ export class ChatWindowGridHost extends Disposable {
 		this._grid = grid;
 		this._gridDisposables.add(grid.onDidChange(() => this._onDidLayoutCells.fire()));
 		this._applyInsets();
-		if (this._dimension) {
-			grid.layout(this._dimension.width, this._dimension.height);
-		}
+		this._placeGrid(grid, dimension);
+		grid.layout(dimension.width, dimension.height);
 		this._onDidLayoutCells.fire();
 	}
 
@@ -406,8 +461,10 @@ export class ChatWindowGridHost extends Disposable {
 			return;
 		}
 		const insets = getChatWindowCellInsets(this._layout.topology, this._gap);
+		const headerAbove = this.headerSpan === SessionHeaderSpan.ChatColumn ? this._header.height : 0;
 		for (const [cell, view] of this._cells) {
-			view.setInsets(insets.get(cell) ?? NO_GRID_EDGE_INSETS);
+			const cellInsets = insets.get(cell) ?? NO_GRID_EDGE_INSETS;
+			view.setInsets(cell === SessionGridCell.Chat && headerAbove ? { ...cellInsets, top: cellInsets.top + headerAbove } : cellInsets);
 		}
 		// The sashes in the gaps between the cards show the gripper of the main window's.
 		if (this._grid) {

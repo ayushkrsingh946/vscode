@@ -90,6 +90,7 @@ export class TitlebarPart extends Part implements ITitlebarPart {
 	private centerContent!: HTMLElement;
 	private windowTitleLabel: HTMLElement | undefined;
 	private fixedTitle: string | undefined;
+	private sessionHeaderHost: HTMLElement | undefined;
 	private rightContent!: HTMLElement;
 	private readonly overflowManagedToolBarElements: HTMLElement[] = [];
 	private titleBarToolBarOverflowScheduler!: AnimationFrameScheduler;
@@ -156,6 +157,22 @@ export class TitlebarPart extends Part implements ITitlebarPart {
 		if (title) {
 			getWindow(this.element).document.title = title;
 		}
+	}
+
+	/**
+	 * The element that shows a session header in place of the title, after the window controls; see
+	 * {@link setHostsSessionHeader}. Created when first asked for, so a title bar that never hosts one is as it was.
+	 */
+	getSessionHeaderHost(): HTMLElement {
+		if (!this.sessionHeaderHost) {
+			this.sessionHeaderHost = append(this.leftContent, $('.session-header-host'));
+		}
+		return this.sessionHeaderHost;
+	}
+
+	/** Shows the {@link getSessionHeaderHost} in place of the title. The window title stays. */
+	setHostsSessionHeader(hosts: boolean): void {
+		this.element.classList.toggle('hosts-session-header', hosts);
 	}
 
 	private renderFixedTitle(): void {

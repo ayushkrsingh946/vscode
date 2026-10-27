@@ -4,12 +4,12 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { ISessionScope } from '../../../services/sessions/browser/sessionScope.js';
-import { $, append, getActiveWindow } from '../../../../base/browser/dom.js';
+import { $, append, getActiveWindow, IDimension } from '../../../../base/browser/dom.js';
 import { timeout } from '../../../../base/common/async.js';
 import { Emitter, Event } from '../../../../base/common/event.js';
 import { Disposable, DisposableStore, IDisposable, MutableDisposable, toDisposable } from '../../../../base/common/lifecycle.js';
 import { autorun, constObservable, derived, derivedOpts, IObservable, ISettableObservable, observableFromEvent, observableValue, waitForState } from '../../../../base/common/observable.js';
-import { isNative } from '../../../../base/common/platform.js';
+import { isMacintosh, isNative } from '../../../../base/common/platform.js';
 import { isEqual } from '../../../../base/common/resources.js';
 import { DeepPartial } from '../../../../base/common/types.js';
 import { URI } from '../../../../base/common/uri.js';
@@ -41,7 +41,7 @@ import { TitlebarPart } from '../../../browser/parts/titlebarPart.js';
 import { IsQuickChatSessionContext, SessionWorkspaceIsVirtualContext } from '../../../common/contextkeys.js';
 import { AGENTS_FLOATING_PANEL_GAP } from '../../../common/layoutConstants.js';
 import { SESSION_ACTIVITY_BAR_SETTING } from '../../../common/sessionConfig.js';
-import { computeSessionGridLayout, SessionGridCell, SessionLayoutMode, SessionTerminalPosition } from '../../../common/sessionGridLayout/sessionGridLayout.js';
+import { computeSessionGridLayout, SessionGridCell, SessionHeaderSpan, SessionLayoutMode, SessionTerminalPosition } from '../../../common/sessionGridLayout/sessionGridLayout.js';
 import { ChatWindowContext, ChatWindowEditorAreaEditorContext, ChatWindowEditorGroupContext, ChatWindowHasEditorAreaContext, ChatWindowHasEditorContext, ChatWindowHasSessionActivityBarContext, ChatWindowHasSessionHeaderContext, ChatWindowIdContext, ChatWindowSessionHasWorkspaceContext, ChatWindowTerminalPositionContext, ChatWindowTerminalShownContext, IChatWindow, IChatWindowContent, IChatWindowEditorArea, IChatWindowHandle, IChatWindowKind, IChatWindowOpenOptions, IChatWindowService, IChatWindowTerminalHost, isChatWindowHandle, SessionLayoutModeContext, SessionSplitLayout, SessionSplitLayoutContext } from '../../../services/chatWindow/browser/chatWindowService.js';
 import { ISessionsPartService, IWindowSessionViewHost } from '../../../services/sessions/browser/sessionsPartService.js';
 import { ISessionsService } from '../../../services/sessions/browser/sessionsService.js';
@@ -691,14 +691,37 @@ export class ChatWindowService extends Disposable implements IChatWindowService 
 			}
 		}));
 
+		// The header row (the title bar) is above the chat's column only while the editor is beside the chat: the editor
+		// then runs to the top of the window. Else it is across the window, above every cell. Only where the window
+		// controls are at the left (macOS): elsewhere they are at the top right, above the editor. The grid takes the
+		// whole window either way, and makes room for the header itself, so that a mode shows with the sizes it had.
+		let lastDimension: IDimension | undefined;
+		const layoutTitlebar = () => {
+			if (!titlebar || !lastDimension) {
+				return;
+			}
+			const chatColumn = gridHost.headerSpan === SessionHeaderSpan.ChatColumn;
+			hostElement.classList.toggle('chat-window-header-chat-column', chatColumn);
+			const width = chatColumn ? gridHost.getCellWidth(SessionGridCell.Chat) || lastDimension.width : lastDimension.width;
+			titlebar.element.style.width = chatColumn ? `${width}px` : '';
+			titlebar.layout(width, titlebar.height, 0, 0);
+		};
+		if (titlebar) {
+			// Above the grid, which is below it in the DOM.
+			titlebar.element.style.position = 'relative';
+			titlebar.element.style.zIndex = '1';
+		}
 		disposables.add(auxiliaryWindow.onWillLayout(dimension => {
-			const titlebarHeight = titlebar?.height ?? 0;
-			titlebar?.layout(dimension.width, titlebarHeight, 0, 0);
-			hostElement.style.top = `${titlebarHeight}px`;
-			hostElement.style.height = `${Math.max(0, dimension.height - titlebarHeight)}px`;
+			lastDimension = dimension;
+			gridHost.setHeader(titlebar?.height ?? 0, !!titlebar && isMacintosh);
+			hostElement.style.top = '0';
+			hostElement.style.height = `${dimension.height}px`;
 			hostElement.style.width = `${dimension.width}px`;
-			gridHost.layoutGrid(dimension.width, Math.max(0, dimension.height - titlebarHeight));
+			gridHost.layoutGrid(dimension.width, dimension.height);
+			layoutTitlebar();
 		}));
+		// The chat's column changes width with a sash, and the header's span with the mode.
+		disposables.add(gridHost.onDidLayoutCells(() => layoutTitlebar()));
 
 		const window = new ChatWindow(state, auxiliaryWindow, editorArea, sessionView, content, sessionObs, () => parts.every(part => part.close()));
 		window.attachInputOnly(inputOnly);
@@ -745,6 +768,14 @@ export class ChatWindowService extends Disposable implements IChatWindowService 
 		window.setContent({ ...content, chat: windowSession.scopedChatResource, editorArea: content.editorArea ? {} : undefined });
 		window.setSession(windowSession);
 		sessionView.openSession(windowSession, {});
+
+		// The session header is the top row of the window in every layout: it shows in the title bar, in place of the title,
+		// which shows again while the header does not, such as while the window shows only the chat input.
+		if (titlebar instanceof TitlebarPart) {
+			const headerTitlebar = titlebar;
+			sessionView.setHeaderHost(headerTitlebar.getSessionHeaderHost());
+			disposables.add(autorun(reader => headerTitlebar.setHostsSessionHeader(sessionView.headerShown.read(reader))));
+		}
 
 		disposables.add(autorun(reader => {
 			const title = window.content.read(reader).title?.read(reader) || kind.title;
