@@ -136,3 +136,6 @@ export function addEmptyEditorAreaAddTab(part: IEmbeddedEditorPart, instantiatio
 	store.add(part.onDidRemoveGroup(group => controls.deleteAndDispose(group)));
 	return store;
 }
+
+/** Names this module, which registers chat window actions, in the list of the chat window contribution; see `chatWindowContributions`. */
+export const chatWindowEditorAreaContribution = 'chatWindowEditorArea';
