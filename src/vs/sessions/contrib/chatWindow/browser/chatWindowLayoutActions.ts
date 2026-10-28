@@ -12,10 +12,11 @@ import { Action2, MenuRegistry, registerAction2 } from '../../../../platform/act
 import { ContextKeyExpr } from '../../../../platform/contextkey/common/contextkey.js';
 import { ServicesAccessor } from '../../../../platform/instantiation/common/instantiation.js';
 import { ChatContextKeys } from '../../../../workbench/contrib/chat/common/actions/chatContextKeys.js';
-import { Menus } from '../../../browser/menus.js';
+import { Menus, SessionActivityBarGroup } from '../../../browser/menus.js';
 import { SessionsCategories } from '../../../common/categories.js';
+import { SessionActivityBarLayoutActionsContext } from '../../../common/contextkeys.js';
 import { SessionLayoutMode } from '../../../common/sessionGridLayout/sessionGridLayout.js';
-import { CHAT_WINDOW_TOGGLE_EDITOR_COMMAND_ID, ChatWindowContext, ChatWindowHasEditorAreaContext, IChatWindow, IChatWindowService, SessionLayoutModeContext, SessionSplitLayoutContext } from '../../../services/chatWindow/browser/chatWindowService.js';
+import { CHAT_WINDOW_TOGGLE_EDITOR_COMMAND_ID, ChatWindowContext, ChatWindowHasEditorAreaContext, ChatWindowHasSessionActivityBarContext, IChatWindow, IChatWindowService, SessionLayoutModeContext, SessionSplitLayoutContext } from '../../../services/chatWindow/browser/chatWindowService.js';
 
 /** A layout mode as offered to the user. */
 export interface IChatWindowLayoutModeChoice {
@@ -218,16 +219,19 @@ registerAction2(class ToggleChatWindowConversationAction extends Action2 {
 	}
 });
 
-// The Layout menu in the title bar of a chat window, which reads the layout it shows.
+// One entry point to the Layout menu of a chat window, which reads the layout it shows: in its Session Activity Bar while
+// the strip shows its layout actions, as the main window has it, and in its title bar otherwise, also in a chat window
+// without the strip.
+const ChatWindowLayoutInActivityBarContext = ContextKeyExpr.and(SessionActivityBarLayoutActionsContext, ChatWindowHasSessionActivityBarContext)!;
 for (const choice of chatWindowLayoutModeChoices) {
-	MenuRegistry.appendMenuItem(Menus.TitleBarRightLayout, {
+	const layoutMenu = {
 		submenu: Menus.ChatWindowLayout,
 		title: localize('chatWindowLayoutMenu', "Layout: {0}", choice.shortTitle),
 		icon: Codicon.layout,
-		group: 'navigation',
-		order: -1,
-		when: ContextKeyExpr.and(ChatWindowLayoutContext, SessionLayoutModeContext.isEqualTo(choice.mode)),
-	});
+	};
+	const shows = ContextKeyExpr.and(ChatWindowLayoutContext, SessionLayoutModeContext.isEqualTo(choice.mode));
+	MenuRegistry.appendMenuItem(Menus.TitleBarRightLayout, { ...layoutMenu, group: 'navigation', order: -1, when: ContextKeyExpr.and(shows, ChatWindowLayoutInActivityBarContext.negate()) });
+	MenuRegistry.appendMenuItem(Menus.SessionActivityBar, { ...layoutMenu, group: SessionActivityBarGroup.Layout, order: 0, when: ContextKeyExpr.and(shows, ChatWindowLayoutInActivityBarContext) });
 }
 
 /** Names this module, which registers chat window actions, in the list of the chat window contribution; see `chatWindowContributions`. */

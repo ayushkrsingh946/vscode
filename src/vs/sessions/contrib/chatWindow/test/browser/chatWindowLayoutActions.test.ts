@@ -18,6 +18,11 @@ import { SessionLayoutMode } from '../../../../common/sessionGridLayout/sessionG
 import { CHAT_WINDOW_TOGGLE_EDITOR_COMMAND_ID, ChatWindowContext, ChatWindowHasEditorAreaContext, IChatWindow, IChatWindowKind, IChatWindowService, isChatWindowHandle, SessionLayoutModeContext, SessionSplitLayout } from '../../../../services/chatWindow/browser/chatWindowService.js';
 import { chatWindowLayoutModeChoices, TOGGLE_CHAT_WINDOW_ARRANGEMENT_COMMAND_ID, TOGGLE_CHAT_WINDOW_CHAT_COMMAND_ID, TOGGLE_CHAT_WINDOW_CONVERSATION_COMMAND_ID } from '../../browser/chatWindowLayoutActions.js';
 import { ChatWindowDefaults, ChatWindowState } from '../../browser/chatWindowState.js';
+import { ContextKeyValue } from '../../../../../platform/contextkey/common/contextkey.js';
+import { SESSION_ACTIVITY_BAR_LAYOUT_ACTIONS_SETTING, SESSION_ACTIVITY_BAR_SETTING } from '../../../../common/sessionConfig.js';
+import { describeMenuGroup, describeSessionActivityBarLayout } from '../../../../test/browser/sessionLayoutModeTestUtils.js';
+// The main window's Layout entry of the Session Activity Bar, which must not show in chat windows.
+import '../../../../browser/sessionLayoutModeActions.js';
 
 suite('Chat window layout actions', () => {
 
@@ -132,6 +137,34 @@ suite('Chat window layout actions', () => {
 			mainWindow: [],
 			perMode: [['Layout: Chat Only'], ['Layout: Editor Only'], ['Layout: Stacked'], ['Layout: Side by Side']],
 			layoutMenu: [...chatWindowLayoutModeChoices.map(choice => choice.id), TOGGLE_CHAT_WINDOW_CHAT_COMMAND_ID, CHAT_WINDOW_TOGGLE_EDITOR_COMMAND_ID, TOGGLE_CHAT_WINDOW_ARRANGEMENT_COMMAND_ID, TOGGLE_CHAT_WINDOW_CONVERSATION_COMMAND_ID].sort(),
+		});
+	});
+
+	test('shows the Layout menu in one place: in the Session Activity Bar while it shows its layout actions, in the title bar otherwise and in a chat window without the strip', () => {
+		const chatWindow: Record<string, ContextKeyValue> = {
+			chatIsEnabled: true,
+			agentSessionsDesktopLayout: true,
+			'sessions.chatWindow': 'test',
+			'sessions.chatWindowHasEditorArea': true,
+			'sessions.chatWindowHasSessionActivityBar': true,
+			'sessions.layoutMode': SessionLayoutMode.Stacked,
+		};
+		const layoutActionsOn = { [SESSION_ACTIVITY_BAR_SETTING]: true, [SESSION_ACTIVITY_BAR_LAYOUT_ACTIONS_SETTING]: true };
+		const layoutActionsOff = { [SESSION_ACTIVITY_BAR_SETTING]: true, [SESSION_ACTIVITY_BAR_LAYOUT_ACTIONS_SETTING]: false };
+		const place = (contextKeys: Record<string, ContextKeyValue>, settings: Record<string, unknown>) => ({
+			strip: describeSessionActivityBarLayout(disposables, contextKeys, settings).map(item => item.label),
+			titleBar: describeMenuGroup(disposables, Menus.TitleBarRightLayout, 'navigation', contextKeys, settings).map(item => item.label).filter(label => label.startsWith('Layout')),
+		});
+
+		assert.deepStrictEqual({
+			layoutActions: place(chatWindow, layoutActionsOn),
+			noLayoutActions: place(chatWindow, layoutActionsOff),
+			withoutStrip: place({ ...chatWindow, 'sessions.chatWindowHasSessionActivityBar': false }, layoutActionsOn),
+		}, {
+			// One Layout button, the chat window's, in the strip; not the main window's.
+			layoutActions: { strip: ['Layout: Stacked'], titleBar: [] },
+			noLayoutActions: { strip: [], titleBar: ['Layout: Stacked'] },
+			withoutStrip: { strip: [], titleBar: ['Layout: Stacked'] },
 		});
 	});
 });
