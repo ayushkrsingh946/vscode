@@ -12,7 +12,7 @@ import { SessionView } from '../../../browser/parts/sessionView.js';
 import { ISessionGridLayout, SessionGridCell, SessionLayoutMode } from '../../../common/sessionGridLayout/sessionGridLayout.js';
 import { ChatWindowCellView, ChatWindowGridHost, IChatWindowCellConstraints } from './chatWindowGridHost.js';
 import { ChatWindowState } from './chatWindowState.js';
-import { clampStackedChatOnResize, decideStackedChatInputOnly, shouldRestoreStackedChatConversation, stackedChatConversationFits, stackedChatForcedByWindow, stackedChatPersistedInputOnly } from './stackedChatInputOnly.js';
+import { clampStackedChatOnResize, decideStackedChatInputOnly, shouldRestoreStackedChatConversation, stackedChatConversationFits, stackedChatForcedByWindow, stackedChatPersistedInputOnly } from '../../../browser/parts/stackedChatInputOnly.js';
 
 /** The least height of the conversation above the chat input, below the editor area. */
 export const CHAT_WINDOW_CONVERSATION_MIN_HEIGHT = 120;
