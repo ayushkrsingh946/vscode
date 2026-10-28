@@ -165,6 +165,19 @@ export class ChatWindowTerminals extends Disposable {
 		}
 	}
 
+	/** Shows the terminal `instanceId` in the terminals, beside those they show, and shows them. */
+	async showTerminal(instanceId: number): Promise<boolean> {
+		const host = this._getHost();
+		if (!host) {
+			return false;
+		}
+		const part = this._ensurePart();
+		this._owner.state.setTerminalShown(true);
+		const group = this._group.get() ?? part.activeGroup;
+		this._group.set(group, undefined);
+		return host.showTerminal(this._owner.window, group, instanceId, false);
+	}
+
 	/** Fills the terminals that show without a terminal, such as those restored before the host registered. */
 	showAgain(): void {
 		if (this._owner.state.terminalShown.get() && (!this._part || this._part.groups.every(group => group.isEmpty))) {

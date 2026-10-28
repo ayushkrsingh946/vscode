@@ -110,6 +110,10 @@ suite('Chat window terminals', () => {
 				calls.push('new');
 				return true;
 			},
+			showTerminal: async (_window, target, instanceId) => {
+				calls.push(`showTerminal:${instanceId}:${target.id}`);
+				return true;
+			},
 			hide: () => calls.push('hide'),
 			release: () => calls.push('release'),
 		};
@@ -127,6 +131,18 @@ suite('Chat window terminals', () => {
 		}, () => hostAvailable ? host : undefined));
 		return { state, group, terminals, calls, created, createdWith, setHost: (available: boolean) => hostAvailable = available, setClosing: (value: boolean) => closing = value };
 	}
+
+	test('a terminal handed to the terminals, such as the terminal of a task, shows in them and shows them; without a host, it does not', async () => {
+		const { state, terminals, calls, setHost } = createEnvironment();
+		const withoutHost = { shown: await terminals.showTerminal(7), terminalsShown: state.terminalShown.get() };
+		setHost(true);
+		const hidden = { shown: await terminals.showTerminal(7), terminalsShown: state.terminalShown.get() };
+		assert.deepStrictEqual({ withoutHost, hidden, calls }, {
+			withoutHost: { shown: false, terminalsShown: false },
+			hidden: { shown: true, terminalsShown: true },
+			calls: ['showTerminal:7:10'],
+		});
+	});
 
 	test('terminals shown before a host registered are filled once it does', async () => {
 		const { state, terminals, calls, setHost } = createEnvironment();

@@ -303,6 +303,10 @@ class ChatWindow implements IChatWindow {
 		return this._terminals?.addTerminal() ?? Promise.resolve();
 	}
 
+	showTerminal(instanceId: number): Promise<boolean> {
+		return this._terminals?.showTerminal(instanceId) ?? Promise.resolve(false);
+	}
+
 	setSession(session: IActiveSession | undefined): void {
 		this._session.set(session, undefined);
 	}

@@ -1000,21 +1000,45 @@ export class ChatWindowTerminalHost implements IChatWindowTerminalHost {
 		this._trackGroup(window, group);
 		let first = true;
 		for (const instance of [...terminals]) {
-			this._contribution.setShownInChatWindow(instance, true);
-			if (instance.target === TerminalLocation.Editor && this._terminalService.foregroundInstances.includes(instance)) {
-				// Shown in an editor elsewhere: from the panel, it moves to the chat window.
-				await this._terminalService.moveToTerminalView(instance);
-			}
-			if (!this._terminalService.foregroundInstances.includes(instance)) {
-				await this._terminalService.showBackgroundTerminal(instance, true);
-			}
-			this._terminalService.moveToEditor(instance, group.id);
-			if (first && focus) {
-				await instance.focusWhenReady(true);
-			}
+			await this._moveToGroup(instance, group, first && focus);
 			first = false;
 		}
 		return true;
+	}
+
+	async showTerminal(window: IChatWindow, group: IEditorGroup, instanceId: number, focus: boolean): Promise<boolean> {
+		const instance = this._terminalService.getInstanceFromId(instanceId);
+		if (!instance || instance.isDisposed) {
+			return false;
+		}
+		const terminals = this._getTerminals(window);
+		this._trackGroup(window, group);
+		if (terminals.has(instance) && instance.target === TerminalLocation.Editor) {
+			// Already one of the window's terminals, such as a task terminal that runs again.
+			if (focus) {
+				await instance.focusWhenReady(true);
+			}
+			return true;
+		}
+		terminals.add(instance);
+		await this._moveToGroup(instance, group, focus);
+		return true;
+	}
+
+	/** Moves a terminal of the window to `group`, out of the panel or an editor elsewhere. */
+	private async _moveToGroup(instance: ITerminalInstance, group: IEditorGroup, focus: boolean): Promise<void> {
+		this._contribution.setShownInChatWindow(instance, true);
+		if (instance.target === TerminalLocation.Editor && this._terminalService.foregroundInstances.includes(instance)) {
+			// Shown in an editor elsewhere: from the panel, it moves to the chat window.
+			await this._terminalService.moveToTerminalView(instance);
+		}
+		if (!this._terminalService.foregroundInstances.includes(instance)) {
+			await this._terminalService.showBackgroundTerminal(instance, true);
+		}
+		this._terminalService.moveToEditor(instance, group.id);
+		if (focus) {
+			await instance.focusWhenReady(true);
+		}
 	}
 
 	async newTerminal(window: IChatWindow, group: IEditorGroup): Promise<boolean> {

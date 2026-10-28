@@ -140,6 +140,11 @@ export interface IChatWindow {
 	setTerminalShown(shown: boolean, options?: { readonly focus?: boolean }): Promise<void>;
 	/** Adds a terminal to its terminals while they show, else shows them. */
 	addTerminal(): Promise<void>;
+	/**
+	 * Shows the terminal `instanceId` of its session in its terminals, beside those they show, such as the terminal of a task
+	 * its Run started. Resolves to whether they show it: false without terminals, such as without an editor area.
+	 */
+	showTerminal(instanceId: number): Promise<boolean>;
 	focus(): void;
 	/** Closes it, moving editors that need confirmation to close, such as unsaved ones, to the main window. */
 	close(): boolean;
@@ -187,6 +192,8 @@ export interface IChatWindowTerminalHost {
 	show(window: IChatWindow, group: IEditorGroup, focus: boolean): Promise<boolean>;
 	/** Opens a new terminal of the session of `window` in `group`. Resolves to whether one opened. */
 	newTerminal(window: IChatWindow, group: IEditorGroup): Promise<boolean>;
+	/** Shows the terminal `instanceId` in `group`, a group of the terminals of `window`, beside those it shows. Resolves to whether it did. */
+	showTerminal(window: IChatWindow, group: IEditorGroup, instanceId: number, focus: boolean): Promise<boolean>;
 	/** Takes the terminals of `window` out of it, as they are about to hide, keeping them running to show again. */
 	hide(window: IChatWindow): void;
 	/** Takes the terminals of `window` out of it, which closes: they are its session's again. */

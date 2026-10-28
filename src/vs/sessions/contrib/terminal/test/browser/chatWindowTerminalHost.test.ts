@@ -75,4 +75,51 @@ suite('ChatWindowTerminalHost', () => {
 			target: TerminalLocation.Panel,
 		});
 	});
+
+	test('shows a terminal handed to it, such as the terminal of a task, in the group of the chat window, from the panel, and once only when it runs again', async () => {
+		const calls: string[] = [];
+		const instance = new class extends mock<ITerminalInstance>() {
+			override readonly instanceId = 9;
+			override readonly isDisposed = false;
+			override target: TerminalLocation | undefined = TerminalLocation.Panel;
+		}();
+		const foreground: ITerminalInstance[] = [instance];
+		const instantiationService = disposables.add(new TestInstantiationService());
+		instantiationService.stub(ITerminalService, new class extends mock<ITerminalService>() {
+			override get foregroundInstances() { return foreground; }
+			override getInstanceFromId(id: number) { return id === instance.instanceId ? instance : undefined; }
+			override async showBackgroundTerminal() { calls.push('fromBackground'); }
+			override moveToEditor(terminal: ITerminalInstance, groupId: number) {
+				terminal.target = TerminalLocation.Editor;
+				calls.push(`toEditor:${groupId}`);
+			}
+			override async moveToTerminalView() { calls.push('toTerminalView'); }
+			override moveToBackground() { calls.push('toBackground'); }
+		}());
+		instantiationService.stub(IEditorGroupsService, new class extends mock<IEditorGroupsService>() { }());
+		const shownInChatWindow: boolean[] = [];
+		const host = instantiationService.createInstance(ChatWindowTerminalHost, {
+			getChatWindowTerminal: async () => undefined,
+			setShownInChatWindow: (_instance: ITerminalInstance, shown: boolean) => shownInChatWindow.push(shown),
+		});
+		const window = new class extends mock<IChatWindow>() { }();
+		const group = new class extends mock<IEditorGroup>() {
+			override readonly id = 7;
+			override readonly editors = [];
+			override readonly onDidModelChange = Event.None;
+		}();
+
+		const first = await host.showTerminal(window, group, 9, false);
+		const again = await host.showTerminal(window, group, 9, false);
+		const unknown = await host.showTerminal(window, group, 99, false);
+		host.release(window);
+
+		assert.deepStrictEqual({ first, again, unknown, calls, shownInChatWindow }, {
+			first: true,
+			again: true,
+			unknown: false,
+			calls: ['toEditor:7', 'toBackground'],
+			shownInChatWindow: [true, false],
+		});
+	});
 });
