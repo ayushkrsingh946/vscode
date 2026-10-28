@@ -15,6 +15,7 @@ import { chatWindowEditorAreaContribution } from './chatWindowEditorArea.js';
 import { chatWindowLayoutActionsContribution } from './chatWindowLayoutActions.js';
 import { chatWindowTerminalActionsContribution } from './chatWindowTerminalActions.js';
 import { ChatWindowsRestoration, openChatInWindowContribution } from './openChatInWindow.js';
+import './chatWindowChangesFileList.js';
 
 registerSingleton(IChatWindowService, ChatWindowService, InstantiationType.Delayed);
 
